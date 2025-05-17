@@ -171,12 +171,14 @@ public class Server3 {
         }
 
         String cardSuit = getCardSuit(card);
-        if (cardSuit.equals(currentSuit) || card.startsWith("8")) {
+        String currentCardRank = discardPile.peek().split(" of ")[0];
+        if (cardSuit.equals(currentSuit) || card.startsWith("8") || card.startsWith(currentCardRank)) {
             player.removeCardFromHand(card);
             discardPile.push(card);
             currentSuit = card.startsWith("8") ? player.chooseSuit() : cardSuit;
             broadcastToAllClients(player.getUsername() + " played: " + card);
-            broadcastLineup();
+            broadcastToAllClients("CURRENT_CARD:" + card); // Notify all clients of the new card in play
+
             if (player.getHand().isEmpty()) {
                 broadcastToAllClients(player.getUsername() + " wins the game!");
                 gameStarted = false;
@@ -184,17 +186,11 @@ public class Server3 {
             }
             nextTurn();
         } else {
-            player.sendMessage("Invalid move: Card does not match the current suit.");
+            player.sendMessage("Invalid move: Card does not match the current suit or rank.");
         }
     }
 
-    private static void broadcastLineup() {
-        StringBuilder lineup = new StringBuilder("Current lineup:\n");
-        for (ClientHandler client : clients) {
-            lineup.append(client.getUsername()).append(": ").append(client.getHand().size()).append(" cards\n");
-        }
-        broadcastToAllClients(lineup.toString());
-    }
+   
 
     private static void displayFinalScores() {
         broadcastToAllClients("Final Scores:");
@@ -305,10 +301,7 @@ public class Server3 {
             sendMessage("HAND:" + String.join(",", hand));
         }
 
-        public void sendLineup() {
-            broadcastLineup();
-        }
-
+     
         public String chooseSuit() {
             sendMessage("CHOOSE_SUIT");
             try {

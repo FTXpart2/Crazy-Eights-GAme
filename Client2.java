@@ -4,7 +4,9 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
-import java.awt.BorderLayout;
+import java.awt.*;
+import java.util.ArrayList;
+import java.util.List;
 
 public class Client2 {
     private String username;
@@ -14,8 +16,12 @@ public class Client2 {
     private JFrame frame;
     private JTextArea chatArea;
     private JTextField inputField;
-    private JButton sendButton;
-    private JButton startButton; // Add "Start" button
+    private JButton drawButton;
+    private JButton startGameButton; // Add "Start Game" button
+    private JPanel cardPanel; // Panel to display cards graphically
+    private List<String> hand = new ArrayList<>(); // Player's hand
+    private JPanel deckPanel; // Panel to display the current card on the discard pile
+    private String currentCardOnDeck; // Track the current card on the discard pile
 
     public Client2() {
         try {
@@ -41,46 +47,72 @@ public class Client2 {
 
     private void setupGUI() {
         frame = new JFrame("CrazyEights Game - " + username);
-        chatArea = new JTextArea(20, 50);
+        frame.setLayout(new BorderLayout());
+
+        // Chat area for optional text input
+        chatArea = new JTextArea(5, 50);
         chatArea.setEditable(false);
         chatArea.setLineWrap(true);
         chatArea.setWrapStyleWord(true);
 
         inputField = new JTextField(40);
-        sendButton = new JButton("Send");
-        startButton = new JButton("Start"); // Initialize "Start" button
+        drawButton = new JButton("Draw Card");
+        startGameButton = new JButton("Start Game"); // Initialize "Start Game" button
 
-        // Create a menu bar
-        JMenuBar menuBar = new JMenuBar();
-        JMenu menu = new JMenu("Options");
-        JMenuItem rulesMenuItem = new JMenuItem("Game Rules");
+        // Card panel for graphical card display
+        cardPanel = new JPanel();
+        cardPanel.setLayout(new FlowLayout());
 
-        // Add action listener to display rules
-        rulesMenuItem.addActionListener(e -> showGameRules());
-        menu.add(rulesMenuItem);
-        menuBar.add(menu);
-        frame.setJMenuBar(menuBar);
+        // Deck panel to display the current card on the discard pile
+        deckPanel = new JPanel() {
+            @Override
+            protected void paintComponent(Graphics g) {
+                super.paintComponent(g);
+                if (currentCardOnDeck != null) {
+                    g.setColor(Color.WHITE); // Card background
+                    g.fillRoundRect(10, 10, 80, 120, 15, 15); // Draw card shape
+                    g.setColor(Color.BLACK); // Card border
+                    g.drawRoundRect(10, 10, 80, 120, 15, 15);
+                    g.setColor(Color.RED); // Card text color
+                    g.drawString(currentCardOnDeck, 20, 70); // Draw card text
+                }
+            }
+        };
+        deckPanel.setPreferredSize(new Dimension(100, 140)); // Set deck panel size
 
-        JPanel panel = new JPanel();
-        panel.add(inputField);
-        panel.add(sendButton);
-        panel.add(startButton); // Add "Start" button to panel
+        // Add components to the frame
+        JPanel bottomPanel = new JPanel();
+        bottomPanel.setLayout(new BorderLayout());
+        bottomPanel.add(new JScrollPane(chatArea), BorderLayout.CENTER);
 
-        frame.getContentPane().add(new JScrollPane(chatArea), BorderLayout.CENTER);
-        frame.getContentPane().add(panel, BorderLayout.SOUTH);
+        JPanel inputPanel = new JPanel();
+        inputPanel.add(inputField);
+        inputPanel.add(drawButton);
+        inputPanel.add(startGameButton); // Add "Start Game" button to input panel
+        bottomPanel.add(inputPanel, BorderLayout.SOUTH);
 
+        JPanel centerPanel = new JPanel(new BorderLayout());
+        centerPanel.add(cardPanel, BorderLayout.CENTER);
+        centerPanel.add(deckPanel, BorderLayout.SOUTH); // Add deck panel below the player's cards
+
+        frame.add(centerPanel, BorderLayout.CENTER);
+        frame.add(bottomPanel, BorderLayout.SOUTH);
+
+        // Add action listeners
         inputField.addActionListener(e -> sendMessage());
-        sendButton.addActionListener(e -> sendMessage());
-        startButton.addActionListener(e -> sendStartSignal()); // Add action listener for "Start" button
+        drawButton.addActionListener(e -> drawCard());
+        startGameButton.addActionListener(e -> showStartMenu()); // Add action listener for "Start Game"
 
-        frame.pack();
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        frame.setSize(800, 600);
         frame.setVisible(true);
     }
 
-    private void showGameRules() {
-        String rules = """
-            Crazy Eights Rules:
+    private void showStartMenu() {
+        // Display a graphical start menu dialog
+        String message = """
+            Welcome to Crazy Eights!
+            Rules:
             1. Each player is dealt 5 cards.
             2. The goal is to be the first player to get rid of all your cards.
             3. On your turn, you must play a card that matches the suit or rank of the top card on the discard pile.
@@ -88,25 +120,81 @@ public class Client2 {
             5. Eights are wild and can be played at any time. The player who plays an eight chooses the next suit.
             6. The game continues until one player has no cards left.
             """;
-        JOptionPane.showMessageDialog(frame, rules, "Game Rules", JOptionPane.INFORMATION_MESSAGE);
+        int response = JOptionPane.showConfirmDialog(frame, message, "Start Game", JOptionPane.OK_CANCEL_OPTION, JOptionPane.INFORMATION_MESSAGE);
+        if (response == JOptionPane.OK_OPTION) {
+            out.println("START_GAME"); // Notify the server that the player is ready
+            out.flush();
+        }
     }
 
-    private void sendStartSignal() {
-        out.println("START_GAME"); // Notify server that the player is ready
+    private void updateCardPanel() {
+        cardPanel.removeAll(); // Clear existing cards
+        for (String card : hand) {
+            JPanel cardGraphic = new JPanel() {
+                @Override
+                protected void paintComponent(Graphics g) {
+                    super.paintComponent(g);
+                    g.setColor(Color.WHITE); // Card background
+                    g.fillRoundRect(10, 10, 80, 120, 15, 15); // Draw card shape
+                    g.setColor(Color.BLACK); // Card border
+                    g.drawRoundRect(10, 10, 80, 120, 15, 15);
+                    g.setColor(Color.BLUE); // Card text color
+                    g.drawString(card, 20, 70); // Draw card text
+                }
+            };
+            cardGraphic.setPreferredSize(new Dimension(100, 140)); // Set card size
+            cardGraphic.setToolTipText("Click to play this card"); // Add tooltip
+            cardGraphic.addMouseListener(new java.awt.event.MouseAdapter() {
+                @Override
+                public void mouseClicked(java.awt.event.MouseEvent e) {
+                    if (isValidPlay(card)) {
+                        playCard(card); // Play the selected card
+                    } else {
+                        JOptionPane.showMessageDialog(frame, "Invalid move! Card does not match the current suit or rank.", "Invalid Move", JOptionPane.ERROR_MESSAGE);
+                    }
+                }
+            });
+            cardPanel.add(cardGraphic); // Add the card graphic to the card panel
+        }
+        cardPanel.revalidate();
+        cardPanel.repaint();
+    }
+
+    private boolean isValidPlay(String card) {
+        if (currentCardOnDeck == null) return false; // No card in play yet
+        String[] currentCardParts = currentCardOnDeck.split(" of ");
+        String[] cardParts = card.split(" of ");
+        // Allow play if the rank matches, the suit matches, or the card is an "8" (wild card)
+        return cardParts[0].equals(currentCardParts[0]) || cardParts[1].equals(currentCardParts[1]) || cardParts[0].equals("8");
+    }
+
+    private void playCard(String card) {
+        if (isValidPlay(card)) {
+            hand.remove(card); // Remove the card from the hand
+            updateCardPanel(); // Update the card panel
+            out.println("PLAY:" + card); // Send the play command to the server
+            out.flush();
+        } else {
+            JOptionPane.showMessageDialog(frame, "Invalid move! Card does not match the current suit or rank.", "Invalid Move", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void drawCard() {
+        out.println("DRAW"); // Send the draw command to the server
         out.flush();
-        chatArea.append("You are ready to start the game.\n");
+    }
+
+    private void updateDeckCard(String card) {
+        currentCardOnDeck = card; // Update the current card on the discard pile
+        deckPanel.repaint(); // Repaint the deck panel to reflect the new card
     }
 
     private void sendMessage() {
         String message = inputField.getText().trim();
         if (!message.isEmpty()) {
-            if (message.startsWith("PLAY:") || message.equals("DRAW")) {
-                out.println(message); // Send play card or draw card command
-            } else {
-                out.println("CHAT:" + message); // Send chat message
-            }
+            out.println("CHAT:" + message); // Send chat message
             out.flush();
-            inputField.setText("");
+            inputField.setText(""); // Clear the input field after sending
         }
     }
 
@@ -117,23 +205,25 @@ public class Client2 {
                 String message;
                 while ((message = in.readLine()) != null) {
                     if (message.startsWith("HAND:")) {
+                        hand.clear();
                         String[] cards = message.substring(5).split(",");
-                        chatArea.append("Your hand: " + String.join(", ", cards) + "\n");
+                        for (String card : cards) {
+                            hand.add(card);
+                        }
+                        updateCardPanel(); // Update the card panel with the new hand
                     } else if (message.startsWith("DRAWN_CARD:")) {
                         String card = message.substring(11);
-                        chatArea.append("You drew: " + card + "\n");
+                        hand.add(card); // Add the drawn card to the hand
+                        updateCardPanel(); // Update the card panel
+                    } else if (message.startsWith("CURRENT_CARD:")) {
+                        String card = message.substring(13);
+                        updateDeckCard(card); // Update the current card on the discard pile
                     } else if (message.equals("YOUR_TURN")) {
-                        chatArea.append("It's your turn! Type 'PLAY:<card>' to play a card or 'DRAW' to draw a card.\n");
-                        out.println("HAND_REQUEST"); // Request the server to send the player's hand
-                        out.flush();
+                        chatArea.append("It's your turn! Click a card to play or press 'Draw Card'.\n");
                     } else if (message.equals("CHOOSE_SUIT")) {
                         String suit = JOptionPane.showInputDialog(frame, "Choose a suit (Hearts, Diamonds, Clubs, Spades):");
                         out.println(suit != null ? suit : "Hearts");
                         out.flush();
-                    } else if (message.equals("CLEAR_CHAT")) {
-                        chatArea.setText(""); // Clear the chat area
-                    } else if (message.startsWith("Current lineup:")) {
-                        chatArea.append(message + "\n");
                     } else {
                         chatArea.append(message + "\n");
                     }
