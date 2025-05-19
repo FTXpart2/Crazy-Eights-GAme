@@ -22,6 +22,7 @@ public class Client2 {
     private List<String> hand = new ArrayList<>(); // Player's hand
     private JPanel deckPanel; // Panel to display the current card on the discard pile
     private String currentCardOnDeck; // Track the current card on the discard pile
+    private String currentSuit; // Track the current suit in play
 
     public Client2() {
         try {
@@ -87,6 +88,12 @@ public class Client2 {
                     }
                     
                     g.drawString(currentCardOnDeck, 20, 70); // Draw card text
+                    
+                    // Display current suit if it's been set after playing an 8
+                    if (currentSuit != null && currentCardOnDeck.startsWith("8")) {
+                        g.setColor(Color.BLUE);
+                        g.drawString("Current Suit: " + currentSuit, 20, 100);
+                    }
                 }
             }
         };
@@ -183,6 +190,7 @@ public class Client2 {
                         JOptionPane.showMessageDialog(frame, 
                             "Invalid move! Card does not match the current suit or rank.\n" +
                             "Current card: " + currentCardOnDeck + "\n" +
+                            "Current suit: " + (currentSuit != null ? currentSuit : getCardSuit(currentCardOnDeck)) + "\n" +
                             "Your card: " + card, 
                             "Invalid Move", 
                             JOptionPane.ERROR_MESSAGE);
@@ -195,11 +203,28 @@ public class Client2 {
         cardPanel.repaint();
     }
 
-    // FIXED isValidPlay - with enhanced debugging and proper validation
+    // Helper method to get the suit of a card
+    private String getCardSuit(String card) {
+        if (card != null && card.contains(" of ")) {
+            return card.split(" of ")[1].trim();
+        }
+        return null;
+    }
+    
+    // Helper method to get the rank of a card
+    private String getCardRank(String card) {
+        if (card != null && card.contains(" of ")) {
+            return card.split(" of ")[0].trim();
+        }
+        return null;
+    }
+
+    // IMPROVED isValidPlay with proper suit tracking
     private boolean isValidPlay(String card) {
         System.out.println("\n--- VALIDATING PLAY ---");
         System.out.println("Card to play: " + card);
         System.out.println("Current card on deck: " + currentCardOnDeck);
+        System.out.println("Current suit: " + currentSuit);
         
         // Check if there's a current card
         if (currentCardOnDeck == null || currentCardOnDeck.isEmpty()) {
@@ -209,30 +234,22 @@ public class Client2 {
         
         try {
             // Split the cards into rank and suit
-            String[] currentCardParts = currentCardOnDeck.split(" of ");
-            String[] cardParts = card.split(" of ");
+            String playRank = getCardRank(card);
+            String playSuit = getCardSuit(card);
+            String currentRank = getCardRank(currentCardOnDeck);
             
-            // Validate we have proper card parts
-            if (currentCardParts.length < 2 || cardParts.length < 2) {
-                System.out.println("ERROR: Invalid card format!");
-                return false;
-            }
+            // If currentSuit is explicitly set (after playing an 8), use that instead of the card's suit
+            String effectiveSuit = currentSuit != null ? currentSuit : getCardSuit(currentCardOnDeck);
             
-            // Extract and trim parts
-            String currentRank = currentCardParts[0].trim();
-            String currentSuit = currentCardParts[1].trim();
-            String playRank = cardParts[0].trim();
-            String playSuit = cardParts[1].trim();
-            
-            System.out.println("Current card: " + currentRank + " of " + currentSuit);
+            System.out.println("Current card: " + currentRank + " of " + effectiveSuit);
             System.out.println("Playing card: " + playRank + " of " + playSuit);
             
             // Check if this is an eight (wild card)
             boolean isEight = playRank.equals("8");
             // Check if ranks match
             boolean ranksMatch = playRank.equals(currentRank);
-            // Check if suits match
-            boolean suitsMatch = playSuit.equals(currentSuit);
+            // Check if suits match with the EFFECTIVE suit (which might be from an 8)
+            boolean suitsMatch = playSuit.equals(effectiveSuit);
             
             System.out.println("Is eight? " + isEight);
             System.out.println("Ranks match? " + ranksMatch);
@@ -250,7 +267,7 @@ public class Client2 {
         }
     }
 
-    // FIXED playCard - simplified without redundant validation
+    // IMPROVED playCard
     private void playCard(String card) {
         System.out.println("Playing card: " + card);
         
@@ -265,9 +282,13 @@ public class Client2 {
         out.println("PLAY:" + card);
         out.flush();
         
-        // Optionally update local state to keep UI in sync
-        // This helps avoid validation errors if there's server lag
-        // updateDeckCard(card);
+        // If we're playing an 8, we'll need to update the currentSuit later when the server asks
+        if (card.startsWith("8")) {
+            System.out.println("Playing an 8 - will be prompted for suit selection");
+        }
+        
+        // Update the current card on deck
+        updateDeckCard(card);
     }
 
     private void drawCard() {
@@ -276,23 +297,34 @@ public class Client2 {
         out.flush();
     }
 
-    // FIXED updateDeckCard - with additional logging
+    // IMPROVED updateDeckCard - with suit tracking
     private void updateDeckCard(String card) {
         System.out.println("Updating current deck card to: " + card);
         currentCardOnDeck = card; // Update the current card on the discard pile
+        
+        // Reset current suit if not playing on an 8
+        if (!card.startsWith("8")) {
+            currentSuit = null;
+        }
+        
         deckPanel.repaint(); // Repaint the deck panel to reflect the new card
     }
 
     private void sendMessage() {
         String message = inputField.getText().trim();
         if (!message.isEmpty()) {
-            out.println("CHAT:" + message); // Send chat message
-            out.flush();
+            if (message.equalsIgnoreCase("restart")) {
+                out.println("RESTART");
+                out.flush();
+            } else {
+                out.println("CHAT:" + message); // Send chat message
+                out.flush();
+            }
             inputField.setText(""); // Clear the input field after sending
         }
     }
 
-    // FIXED ServerListener - with improved debugging and proper handling of server messages
+    // IMPROVED ServerListener - with proper suit handling
     private class ServerListener implements Runnable {
         @Override
         public void run() {
@@ -340,12 +372,51 @@ public class Client2 {
                             null, 
                             suits, 
                             suits[0]);
-                        System.out.println("Chosen suit: " + (suit != null ? suit : "Hearts"));
-                        out.println(suit != null ? suit : "Hearts");
-                        out.flush();
+                        
+                        if (suit != null) {
+                            System.out.println("Chosen suit: " + suit);
+                            // Update the current suit locally
+                            currentSuit = suit;
+                            // Send the suit choice to the server
+                            out.println("SUIT:" + suit);
+                            out.flush();
+                            chatArea.append("You chose suit: " + suit + "\n");
+                        } else {
+                            // Default to Hearts if canceled
+                            System.out.println("Dialog canceled, defaulting to Hearts");
+                            currentSuit = "Hearts";
+                            out.println("SUIT:Hearts");
+                            out.flush();
+                            chatArea.append("You chose suit: Hearts\n");
+                        }
+                        deckPanel.repaint(); // Repaint to show the new suit
+                        
+                    } else if (message.startsWith("CHOSEN_SUIT:")) {
+                        // Update when server tells us another player has chosen a suit
+                        String suit = message.substring(12).trim();
+                        System.out.println("Server notified of chosen suit: " + suit);
+                        currentSuit = suit;
+                        chatArea.append("Current suit changed to: " + currentSuit + "\n");
+                        deckPanel.repaint(); // Repaint to show the new suit
                         
                     } else {
                         chatArea.append(message + "\n");
+                        
+                        // End game screen if someone wins
+                        if (message.contains("wins the game!")) {
+                            String winner = message.split(" ")[0];
+                            SwingUtilities.invokeLater(() -> {
+                                JOptionPane.showMessageDialog(frame, winner + " wins the game!\nType 'restart' to play again.", "Game Over", JOptionPane.INFORMATION_MESSAGE);
+                            });
+                        }
+                        
+                        // Check if a message contains suit selection from another player
+                        if (message.contains(" chose suit: ")) {
+                            String suit = message.substring(message.indexOf("suit: ") + 6).trim();
+                            System.out.println("Detected suit change in chat: " + suit);
+                            currentSuit = suit;
+                            deckPanel.repaint();
+                        }
                     }
                     chatArea.setCaretPosition(chatArea.getDocument().getLength());
                 }

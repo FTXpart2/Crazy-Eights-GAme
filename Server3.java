@@ -124,6 +124,27 @@ public class Server3 {
         nextTurn();
     }
 
+    private static synchronized void restartGame() {
+        // Reset game state
+        deck.clear();
+        discardPile.clear();
+        currentSuit = null;
+        gameStarted = false;
+        waitingForSuitPlayer = null;
+        waitingForSuitCard = null;
+        readyPlayers.clear();
+        // Clear all player hands
+        for (ClientHandler client : clients) {
+            client.hand.clear();
+        }
+        broadcastToAllClients("Game is restarting...");
+        // Mark all players as ready for auto-restart
+        for (ClientHandler client : clients) {
+            readyPlayers.add(client.getUsername());
+        }
+        startGame();
+    }
+
     private static void initializeDeck() {
         String[] suits = {"Hearts", "Diamonds", "Clubs", "Spades"};
         String[] ranks = {"2", "3", "4", "5", "6", "7", "8", "9", "10", "Jack", "Queen", "King", "Ace"};
@@ -270,6 +291,9 @@ public class Server3 {
                         }
                         broadcastToAllClients(username + " is ready to start!");
                         if (!gameStarted) startGame();
+                    } else if (message.equalsIgnoreCase("RESTART")) {
+                        broadcastToAllClients(username + " requested a restart!");
+                        restartGame();
                     } else if (message.startsWith("PLAY:")) {
                         String card = message.substring(5);
                         handlePlayerMove(this, card);
