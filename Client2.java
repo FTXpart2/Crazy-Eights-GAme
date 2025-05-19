@@ -25,7 +25,7 @@ public class Client2 {
 
     public Client2() {
         try {
-            socket = new Socket("10.210.124.160", 4414);
+            socket = new Socket("192.168.0.239", 4414);
             in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
             out = new PrintWriter(socket.getOutputStream(), true);
 
@@ -73,7 +73,19 @@ public class Client2 {
                     g.fillRoundRect(10, 10, 80, 120, 15, 15); // Draw card shape
                     g.setColor(Color.BLACK); // Card border
                     g.drawRoundRect(10, 10, 80, 120, 15, 15);
-                    g.setColor(Color.RED); // Card text color
+                    
+                    // Determine card color based on suit
+                    if (currentCardOnDeck.contains(" of ")) {
+                        String suit = currentCardOnDeck.split(" of ")[1].trim();
+                        if (suit.equals("Hearts") || suit.equals("Diamonds")) {
+                            g.setColor(Color.RED); // Red for Hearts and Diamonds
+                        } else {
+                            g.setColor(Color.BLACK); // Black for Clubs and Spades
+                        }
+                    } else {
+                        g.setColor(Color.BLACK); // Default color
+                    }
+                    
                     g.drawString(currentCardOnDeck, 20, 70); // Draw card text
                 }
             }
@@ -129,6 +141,8 @@ public class Client2 {
 
     private void updateCardPanel() {
         cardPanel.removeAll(); // Clear existing cards
+        System.out.println("Updating card panel with " + hand.size() + " cards");
+        
         for (String card : hand) {
             JPanel cardGraphic = new JPanel() {
                 @Override
@@ -138,19 +152,40 @@ public class Client2 {
                     g.fillRoundRect(10, 10, 80, 120, 15, 15); // Draw card shape
                     g.setColor(Color.BLACK); // Card border
                     g.drawRoundRect(10, 10, 80, 120, 15, 15);
-                    g.setColor(Color.BLUE); // Card text color
+                    
+                    // Determine card color based on suit
+                    if (card.contains(" of ")) {
+                        String suit = card.split(" of ")[1].trim();
+                        if (suit.equals("Hearts") || suit.equals("Diamonds")) {
+                            g.setColor(Color.RED); // Red for Hearts and Diamonds
+                        } else {
+                            g.setColor(Color.BLACK); // Black for Clubs and Spades
+                        }
+                    } else {
+                        g.setColor(Color.BLACK); // Default color
+                    }
+                    
                     g.drawString(card, 20, 70); // Draw card text
                 }
             };
             cardGraphic.setPreferredSize(new Dimension(100, 140)); // Set card size
-            cardGraphic.setToolTipText("Click to play this card"); // Add tooltip
+            cardGraphic.setToolTipText("Click to play this card: " + card); // Add tooltip
             cardGraphic.addMouseListener(new java.awt.event.MouseAdapter() {
                 @Override
                 public void mouseClicked(java.awt.event.MouseEvent e) {
+                    System.out.println("Card clicked: " + card);
+                    
                     if (isValidPlay(card)) {
+                        System.out.println("Valid play detected - playing card: " + card);
                         playCard(card); // Play the selected card
                     } else {
-                        JOptionPane.showMessageDialog(frame, "Invalid move! Card does not match the current suit or rank.", "Invalid Move", JOptionPane.ERROR_MESSAGE);
+                        System.out.println("Invalid play detected for card: " + card);
+                        JOptionPane.showMessageDialog(frame, 
+                            "Invalid move! Card does not match the current suit or rank.\n" +
+                            "Current card: " + currentCardOnDeck + "\n" +
+                            "Your card: " + card, 
+                            "Invalid Move", 
+                            JOptionPane.ERROR_MESSAGE);
                     }
                 }
             });
@@ -160,31 +195,90 @@ public class Client2 {
         cardPanel.repaint();
     }
 
+    // FIXED isValidPlay - with enhanced debugging and proper validation
     private boolean isValidPlay(String card) {
-        if (currentCardOnDeck == null) return false; // No card in play yet
-        String[] currentCardParts = currentCardOnDeck.split(" of ");
-        String[] cardParts = card.split(" of ");
-        // Allow play if the rank matches, the suit matches, or the card is an "8" (wild card)
-        return cardParts[0].equals(currentCardParts[0]) || cardParts[1].equals(currentCardParts[1]) || cardParts[0].equals("8");
-    }
-
-    private void playCard(String card) {
-        if (isValidPlay(card)) {
-            hand.remove(card); // Remove the card from the hand
-            updateCardPanel(); // Update the card panel
-            out.println("PLAY:" + card); // Send the play command to the server
-            out.flush();
-        } else {
-            JOptionPane.showMessageDialog(frame, "Invalid move! Card does not match the current suit or rank.", "Invalid Move", JOptionPane.ERROR_MESSAGE);
+        System.out.println("\n--- VALIDATING PLAY ---");
+        System.out.println("Card to play: " + card);
+        System.out.println("Current card on deck: " + currentCardOnDeck);
+        
+        // Check if there's a current card
+        if (currentCardOnDeck == null || currentCardOnDeck.isEmpty()) {
+            System.out.println("ERROR: No current card on deck!");
+            return false;
+        }
+        
+        try {
+            // Split the cards into rank and suit
+            String[] currentCardParts = currentCardOnDeck.split(" of ");
+            String[] cardParts = card.split(" of ");
+            
+            // Validate we have proper card parts
+            if (currentCardParts.length < 2 || cardParts.length < 2) {
+                System.out.println("ERROR: Invalid card format!");
+                return false;
+            }
+            
+            // Extract and trim parts
+            String currentRank = currentCardParts[0].trim();
+            String currentSuit = currentCardParts[1].trim();
+            String playRank = cardParts[0].trim();
+            String playSuit = cardParts[1].trim();
+            
+            System.out.println("Current card: " + currentRank + " of " + currentSuit);
+            System.out.println("Playing card: " + playRank + " of " + playSuit);
+            
+            // Check if this is an eight (wild card)
+            boolean isEight = playRank.equals("8");
+            // Check if ranks match
+            boolean ranksMatch = playRank.equals(currentRank);
+            // Check if suits match
+            boolean suitsMatch = playSuit.equals(currentSuit);
+            
+            System.out.println("Is eight? " + isEight);
+            System.out.println("Ranks match? " + ranksMatch);
+            System.out.println("Suits match? " + suitsMatch);
+            
+            // Valid if any condition is met
+            boolean isValid = isEight || ranksMatch || suitsMatch;
+            System.out.println("VALIDATION RESULT: " + (isValid ? "VALID PLAY" : "INVALID PLAY"));
+            return isValid;
+            
+        } catch (Exception e) {
+            System.out.println("ERROR in validation: " + e.getMessage());
+            e.printStackTrace();
+            return false;
         }
     }
 
+    // FIXED playCard - simplified without redundant validation
+    private void playCard(String card) {
+        System.out.println("Playing card: " + card);
+        
+        // Remove card from hand
+        hand.remove(card);
+        
+        // Update UI
+        updateCardPanel();
+        
+        // Send to server
+        System.out.println("Sending PLAY command to server: " + card);
+        out.println("PLAY:" + card);
+        out.flush();
+        
+        // Optionally update local state to keep UI in sync
+        // This helps avoid validation errors if there's server lag
+        // updateDeckCard(card);
+    }
+
     private void drawCard() {
+        System.out.println("Drawing card from server");
         out.println("DRAW"); // Send the draw command to the server
         out.flush();
     }
 
+    // FIXED updateDeckCard - with additional logging
     private void updateDeckCard(String card) {
+        System.out.println("Updating current deck card to: " + card);
         currentCardOnDeck = card; // Update the current card on the discard pile
         deckPanel.repaint(); // Repaint the deck panel to reflect the new card
     }
@@ -198,45 +292,72 @@ public class Client2 {
         }
     }
 
+    // FIXED ServerListener - with improved debugging and proper handling of server messages
     private class ServerListener implements Runnable {
         @Override
         public void run() {
             try {
                 String message;
                 while ((message = in.readLine()) != null) {
+                    System.out.println("SERVER → CLIENT: " + message);
+                    
                     if (message.startsWith("HAND:")) {
                         hand.clear();
                         String[] cards = message.substring(5).split(",");
                         for (String card : cards) {
-                            hand.add(card);
+                            if (!card.trim().isEmpty()) {
+                                hand.add(card.trim());
+                            }
                         }
-                        updateCardPanel(); // Update the card panel with the new hand
+                        System.out.println("Hand updated: " + hand);
+                        SwingUtilities.invokeLater(() -> updateCardPanel());
+                        
                     } else if (message.startsWith("DRAWN_CARD:")) {
-                        String card = message.substring(11);
-                        hand.add(card); // Add the drawn card to the hand
-                        updateCardPanel(); // Update the card panel
+                        String card = message.substring(11).trim();
+                        hand.add(card);
+                        System.out.println("Card drawn: " + card);
+                        chatArea.append("You drew: " + card + "\n");
+                        SwingUtilities.invokeLater(() -> updateCardPanel());
+                        
                     } else if (message.startsWith("CURRENT_CARD:")) {
-                        String card = message.substring(13);
-                        updateDeckCard(card); // Update the current card on the discard pile
+                        String card = message.substring(13).trim();
+                        System.out.println("Current card updated to: " + card);
+                        currentCardOnDeck = card;
+                        SwingUtilities.invokeLater(() -> deckPanel.repaint());
+                        chatArea.append("Current card: " + card + "\n");
+                        
                     } else if (message.equals("YOUR_TURN")) {
+                        System.out.println("It's now this player's turn");
                         chatArea.append("It's your turn! Click a card to play or press 'Draw Card'.\n");
+                        
                     } else if (message.equals("CHOOSE_SUIT")) {
-                        String suit = JOptionPane.showInputDialog(frame, "Choose a suit (Hearts, Diamonds, Clubs, Spades):");
+                        String[] suits = {"Hearts", "Diamonds", "Clubs", "Spades"};
+                        String suit = (String) JOptionPane.showInputDialog(
+                            frame, 
+                            "Choose a suit:", 
+                            "Suit Selection", 
+                            JOptionPane.QUESTION_MESSAGE, 
+                            null, 
+                            suits, 
+                            suits[0]);
+                        System.out.println("Chosen suit: " + (suit != null ? suit : "Hearts"));
                         out.println(suit != null ? suit : "Hearts");
                         out.flush();
+                        
                     } else {
                         chatArea.append(message + "\n");
                     }
                     chatArea.setCaretPosition(chatArea.getDocument().getLength());
                 }
             } catch (IOException e) {
+                System.out.println("Connection error: " + e.getMessage());
+                chatArea.append("Connection to server lost: " + e.getMessage() + "\n");
                 e.printStackTrace();
-                System.exit(0);
             }
         }
     }
 
     public static void main(String[] args) {
-        new Client2();
+        SwingUtilities.invokeLater(() -> new Client2());
     }
 }

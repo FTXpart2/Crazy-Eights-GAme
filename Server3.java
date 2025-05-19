@@ -30,6 +30,8 @@ public class Server3 {
     private static Stack<String> discardPile = new Stack<>();
     private static String currentSuit = null; // Track the current suit in play
     private static boolean gameStarted = false;
+    private static ClientHandler waitingForSuitPlayer = null;
+    private static String waitingForSuitCard = null;
 
     public static void main(String[] args) {
         int portNumber = 4414;
@@ -117,6 +119,7 @@ public class Server3 {
         discardPile.push(deck.pop());
         currentSuit = getCardSuit(discardPile.peek());
         broadcastToAllClients("First card: " + discardPile.peek());
+        broadcastToAllClients("CURRENT_CARD:" + discardPile.peek()); // Ensure all clients know the current card at game start
         gameStarted = true;
         nextTurn();
     }
@@ -144,6 +147,8 @@ public class Server3 {
     private static void nextTurn() {
         currentPlayerIndex = (currentPlayerIndex + 1) % clients.size();
         ClientHandler currentPlayer = clients.get(currentPlayerIndex);
+        // Always send the current card to the current player before their turn
+        currentPlayer.sendMessage("CURRENT_CARD:" + discardPile.peek());
         broadcastToAllClients("It's " + currentPlayer.getUsername() + "'s turn.");
         currentPlayer.sendMessage("YOUR_TURN");
         currentPlayer.sendHand(); // Send the player's hand when it's their turn
@@ -154,6 +159,10 @@ public class Server3 {
     }
 
     private static void handlePlayerMove(ClientHandler player, String card) {
+        if (waitingForSuitPlayer != null) {
+            player.sendMessage("Please choose a suit before making another move.");
+            return;
+        }
         if (card.equals("DRAW")) {
             if (!deck.isEmpty()) {
                 String drawnCard = deck.pop();
@@ -175,13 +184,22 @@ public class Server3 {
         if (cardSuit.equals(currentSuit) || card.startsWith("8") || card.startsWith(currentCardRank)) {
             player.removeCardFromHand(card);
             discardPile.push(card);
-            currentSuit = card.startsWith("8") ? player.chooseSuit() : cardSuit;
+            if (card.startsWith("8")) {
+                waitingForSuitPlayer = player;
+                waitingForSuitCard = card;
+                player.sendMessage("CHOOSE_SUIT");
+                return;
+            } else {
+                currentSuit = cardSuit;
+            }
             broadcastToAllClients(player.getUsername() + " played: " + card);
             broadcastToAllClients("CURRENT_CARD:" + card); // Notify all clients of the new card in play
 
             if (player.getHand().isEmpty()) {
                 broadcastToAllClients(player.getUsername() + " wins the game!");
                 gameStarted = false;
+                waitingForSuitPlayer = null;
+                waitingForSuitCard = null;
                 return;
             }
             nextTurn();
@@ -189,8 +207,6 @@ public class Server3 {
             player.sendMessage("Invalid move: Card does not match the current suit or rank.");
         }
     }
-
-   
 
     private static void displayFinalScores() {
         broadcastToAllClients("Final Scores:");
@@ -262,6 +278,23 @@ public class Server3 {
                     } else if (message.startsWith("CHAT:")) {
                         String chatMessage = message.substring(5);
                         broadcastToAllClients(username + ": " + chatMessage);
+                    } else if (message.startsWith("SUIT:")) {
+                        String suit = message.substring(5).trim();
+                        if (waitingForSuitPlayer == this && waitingForSuitCard != null) {
+                            currentSuit = suit;
+                            broadcastToAllClients(username + " chose suit: " + suit);
+                            broadcastToAllClients("CURRENT_CARD:" + waitingForSuitCard);
+                            if (hand.isEmpty()) {
+                                broadcastToAllClients(username + " wins the game!");
+                                gameStarted = false;
+                            } else {
+                                nextTurn();
+                            }
+                            waitingForSuitPlayer = null;
+                            waitingForSuitCard = null;
+                        } else {
+                            sendMessage("Not expecting a suit selection from you.");
+                        }
                     }
                 }
             } catch (IOException e) {
@@ -299,16 +332,6 @@ public class Server3 {
 
         public void sendHand() {
             sendMessage("HAND:" + String.join(",", hand));
-        }
-
-     
-        public String chooseSuit() {
-            sendMessage("CHOOSE_SUIT");
-            try {
-                return in.readLine(); // Wait for the player to choose a suit
-            } catch (IOException e) {
-                return "Hearts"; // Default suit in case of error
-            }
         }
 
         private void updateClientList() {
