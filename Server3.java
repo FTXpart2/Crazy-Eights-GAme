@@ -270,19 +270,6 @@ public class Server3 {
                 userScores.putIfAbsent(username, 0);
                 broadcastToAllClients(username + " has joined the game!");
                 updateClientList();
-
-                // Send game rules to the newly joined client
-                sendMessage("""
-                    Welcome to Crazy Eights!
-                    Rules:
-                    1. Each player is dealt 5 cards.
-                    2. The goal is to be the first player to get rid of all your cards.
-                    3. On your turn, you must play a card that matches the suit or rank of the top card on the discard pile.
-                    4. If you cannot play, you must draw a card from the deck.
-                    5. Eights are wild and can be played at any time. The player who plays an eight chooses the next suit.
-                    6. The game continues until one player has no cards left.
-                    """);
-
                 String message;
                 while ((message = in.readLine()) != null) {
                     if (message.equals("START_GAME")) {

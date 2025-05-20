@@ -23,10 +23,11 @@ public class Client2 {
     private JPanel deckPanel; // Panel to display the current card on the discard pile
     private String currentCardOnDeck; // Track the current card on the discard pile
     private String currentSuit; // Track the current suit in play
+    private boolean myTurn = false; // Track if it's this client's turn
 
     public Client2() {
         try {
-            socket = new Socket("192.168.0.239", 4414);
+            socket = new Socket("10.210.124.160", 4414);
             in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
             out = new PrintWriter(socket.getOutputStream(), true);
 
@@ -180,11 +181,16 @@ public class Client2 {
             cardGraphic.addMouseListener(new java.awt.event.MouseAdapter() {
                 @Override
                 public void mouseClicked(java.awt.event.MouseEvent e) {
+                    if (!myTurn) {
+                        JOptionPane.showMessageDialog(frame, "It's not your turn!", "Wait", JOptionPane.WARNING_MESSAGE);
+                        return;
+                    }
+                    
                     System.out.println("Card clicked: " + card);
                     
                     if (isValidPlay(card)) {
-                        System.out.println("Valid play detected - playing card: " + card);
                         playCard(card); // Play the selected card
+                        myTurn = false; // End turn after playing a card
                     } else {
                         System.out.println("Invalid play detected for card: " + card);
                         JOptionPane.showMessageDialog(frame, 
@@ -289,12 +295,20 @@ public class Client2 {
         
         // Update the current card on deck
         updateDeckCard(card);
+        
+        myTurn = false; // End turn after playing a card
     }
 
     private void drawCard() {
+        if (!myTurn) {
+            JOptionPane.showMessageDialog(frame, "It's not your turn!", "Wait", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        
         System.out.println("Drawing card from server");
         out.println("DRAW"); // Send the draw command to the server
         out.flush();
+        // DO NOT set myTurn = false here!
     }
 
     // IMPROVED updateDeckCard - with suit tracking
@@ -361,6 +375,7 @@ public class Client2 {
                     } else if (message.equals("YOUR_TURN")) {
                         System.out.println("It's now this player's turn");
                         chatArea.append("It's your turn! Click a card to play or press 'Draw Card'.\n");
+                        myTurn = true; // Allow actions only on your turn
                         
                     } else if (message.equals("CHOOSE_SUIT")) {
                         String[] suits = {"Hearts", "Diamonds", "Clubs", "Spades"};
