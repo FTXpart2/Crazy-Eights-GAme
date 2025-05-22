@@ -27,7 +27,7 @@ public class Client2 {
 
     public Client2() {
         try {
-            socket = new Socket("10.210.124.160", 4414);
+            socket = new Socket("192.168.0.239", 4414);
             in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
             out = new PrintWriter(socket.getOutputStream(), true);
 
@@ -414,6 +414,11 @@ public class Client2 {
                         chatArea.append("Current suit changed to: " + currentSuit + "\n");
                         deckPanel.repaint(); // Repaint to show the new suit
                         
+                    } else if (message.startsWith("GAME_OVER:Server")) {
+                        SwingUtilities.invokeLater(() -> {
+                            JOptionPane.showMessageDialog(frame, "Game ended by server.\nType 'restart' to play again.", "Game Over", JOptionPane.INFORMATION_MESSAGE);
+                        });
+                        myTurn = false;
                     } else {
                         chatArea.append(message + "\n");
                         

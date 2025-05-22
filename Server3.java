@@ -64,8 +64,16 @@ public class Server3 {
             public void actionPerformed(ActionEvent e) {
                 String message = inputField.getText();
                 if (!message.isEmpty()) {
-                    chatArea.append("Server: " + message + "\n");
-                    broadcastToAllClients("Server: " + message);
+                    if (message.trim().equalsIgnoreCase("y")) {
+                        broadcastToAllClients("GAME_OVER:Server");
+                        gameStarted = false;
+                        waitingForSuitPlayer = null;
+                        waitingForSuitCard = null;
+                        chatArea.append("Game ended by server.\n");
+                    } else {
+                        chatArea.append("Server: " + message + "\n");
+                        broadcastToAllClients("Server: " + message);
+                    }
                     inputField.setText("");
                 }
             }
