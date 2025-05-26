@@ -19,37 +19,32 @@ public class Client {
     private JTextField inputField;
     private JButton drawButton;
     private JButton startGameButton;
-    private JButton musicToggleButton; // New button to toggle music
+    private JButton musicToggleButton;
     private JPanel cardPanel;
     private DLList<String> hand = new DLList<>();
     private JPanel deckPanel;
     private String currentCardOnDeck;
     private String currentSuit;
     private boolean myTurn = false;
-    
-    // Music components
     private Clip gameplayMusicClip;
     private Clip endGameMusicClip;
     private boolean musicEnabled = true;
     private boolean gameplayMusicPlaying = false;
+    private ArrayList<String> cardsDrawnHistory = new ArrayList<>();
+    private int cardsDrawnCount = 0;
 
     public Client() {
         try {
             socket = new Socket("192.168.0.239", 4414);
             in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
             out = new PrintWriter(socket.getOutputStream(), true);
-
             username = JOptionPane.showInputDialog("Enter your username:");
             if (username == null || username.trim().isEmpty()) {
                 System.exit(0);
             }
             out.println(username);
-
-            // Initialize music
             initializeMusic();
-            
             setupGUI();
-
             new Thread(new ServerListener()).start();
         } catch (IOException e) {
             e.printStackTrace();
@@ -60,12 +55,8 @@ public class Client {
 
     private void initializeMusic() {
         try {
-            // Initialize gameplay music with a simple generated tone
             gameplayMusicClip = generateGameplayMusic();
-            
-            // Initialize end game music with a different tone
             endGameMusicClip = generateEndGameMusic();
-            
         } catch (Exception e) {
             musicEnabled = false;
         }
@@ -73,28 +64,22 @@ public class Client {
 
     private Clip generateGameplayMusic() throws LineUnavailableException {
         int sampleRate = 44100;
-        int duration = 16; // seconds
+        int duration = 16;
         byte[] buffer = new byte[sampleRate * duration * 2];
-
-        // Gentle, slow, original melody inspired by 'Unchained Melody' style (C major)
         double[] melody = {
-            261.63, 293.66, 329.63, 349.23, 392.00, 349.23, 329.63, 293.66, // C D E F G F E D
-            261.63, 329.63, 392.00, 440.00, 392.00, 349.23, 329.63, 293.66, // C E G A G F E D
-            261.63, 293.66, 329.63, 349.23, 392.00, 349.23, 329.63, 293.66, // repeat
-            261.63, 0, 261.63, 0, 261.63, 0, 261.63, 0 // C (rests for gentle effect)
+            261.63, 293.66, 329.63, 349.23, 392.00, 349.23, 329.63, 293.66,
+            261.63, 329.63, 392.00, 440.00, 392.00, 349.23, 329.63, 293.66,
+            261.63, 293.66, 329.63, 349.23, 392.00, 349.23, 329.63, 293.66,
+            261.63, 0, 261.63, 0, 261.63, 0, 261.63, 0
         };
-
         double noteDuration = (double) duration / melody.length;
         int samplesPerNote = (int) (sampleRate * noteDuration);
-
         int bufferIndex = 0;
         for (int noteIndex = 0; noteIndex < melody.length; noteIndex++) {
             double frequency = melody[noteIndex];
             for (int i = 0; i < samplesPerNote && bufferIndex < buffer.length - 1; i++) {
                 double t = (double) i / sampleRate;
                 double amplitude = 0.18;
-
-                // ADSR envelope (attack, decay, sustain, release)
                 double env;
                 double attack = 0.08, decay = 0.12, release = 0.18;
                 double pos = (double) i / samplesPerNote;
@@ -102,10 +87,8 @@ public class Client {
                 else if (pos < attack + decay) env = 1.0 - (pos - attack) / decay * 0.3;
                 else if (pos < 1.0 - release) env = 0.7;
                 else env = 0.7 * (1.0 - (pos - (1.0 - release)) / release);
-
                 double wave = 0;
                 if (frequency > 0) {
-                    // Sine wave with gentle harmonics
                     wave += amplitude * env * Math.sin(2 * Math.PI * frequency * t);
                     wave += 0.10 * amplitude * env * Math.sin(2 * Math.PI * frequency * 2 * t);
                 }
@@ -114,7 +97,6 @@ public class Client {
                 buffer[bufferIndex++] = (byte) ((sample >> 8) & 0xFF);
             }
         }
-
         AudioFormat format = new AudioFormat(sampleRate, 16, 1, true, false);
         DataLine.Info info = new DataLine.Info(Clip.class, format);
         Clip clip = (Clip) AudioSystem.getLine(info);
@@ -124,33 +106,27 @@ public class Client {
 
     private Clip generateEndGameMusic() throws LineUnavailableException {
         int sampleRate = 44100;
-        int duration = 4; // 4 seconds
+        int duration = 4;
         byte[] buffer = new byte[sampleRate * duration * 2];
-
         int bufferIndex = 0;
-
-        // 1. Rising glissando (slot machine effect)
         double startFreq = 400, endFreq = 1800;
-        int glissSamples = sampleRate * 2; // 2 seconds
+        int glissSamples = sampleRate * 2;
         for (int i = 0; i < glissSamples && bufferIndex < buffer.length - 1; i++) {
             double t = (double) i / sampleRate;
             double freq = startFreq + (endFreq - startFreq) * ((double) i / glissSamples);
-            double env = Math.min(1.0, t / 0.2); // Quick attack
+            double env = Math.min(1.0, t / 0.2);
             double wave = 0.35 * env * Math.sin(2 * Math.PI * freq * t);
             short sample = (short) (wave * 32767);
             buffer[bufferIndex++] = (byte) (sample & 0xFF);
             buffer[bufferIndex++] = (byte) ((sample >> 8) & 0xFF);
         }
-
-        // 2. Bell-like tones (winning chimes)
-        double[] bellFreqs = { 1318.5, 1567.98, 1760.00, 2093.00 }; // E6, G6, A6, C7
-        int bellSamples = sampleRate / 2; // 0.5s per bell
+        double[] bellFreqs = { 1318.5, 1567.98, 1760.00, 2093.00 };
+        int bellSamples = sampleRate / 2;
         for (double freq : bellFreqs) {
             for (int i = 0; i < bellSamples && bufferIndex < buffer.length - 1; i++) {
                 double t = (double) i / sampleRate;
-                double env = Math.exp(-3 * t); // Fast decay
+                double env = Math.exp(-3 * t);
                 double wave = 0.5 * env * Math.sin(2 * Math.PI * freq * t);
-                // Add some overtones for bell effect
                 wave += 0.2 * env * Math.sin(2 * Math.PI * freq * 2 * t);
                 wave += 0.1 * env * Math.sin(2 * Math.PI * freq * 3 * t);
                 short sample = (short) (wave * 32767);
@@ -158,13 +134,11 @@ public class Client {
                 buffer[bufferIndex++] = (byte) ((sample >> 8) & 0xFF);
             }
         }
-
-        // 3. Final celebratory chord (C major)
-        double[] chordFreqs = { 523.25, 659.25, 783.99 }; // C5, E5, G5
-        int chordSamples = sampleRate / 2; // 0.5s
+        double[] chordFreqs = { 523.25, 659.25, 783.99 };
+        int chordSamples = sampleRate / 2;
         for (int i = 0; i < chordSamples && bufferIndex < buffer.length - 1; i++) {
             double t = (double) i / sampleRate;
-            double env = Math.exp(-2 * t); // Decay
+            double env = Math.exp(-2 * t);
             double wave = 0;
             for (double freq : chordFreqs) {
                 wave += (0.25 * env * Math.sin(2 * Math.PI * freq * t));
@@ -173,13 +147,10 @@ public class Client {
             buffer[bufferIndex++] = (byte) (sample & 0xFF);
             buffer[bufferIndex++] = (byte) ((sample >> 8) & 0xFF);
         }
-
-        // Fill the rest with silence
         while (bufferIndex < buffer.length) {
             buffer[bufferIndex++] = 0;
             buffer[bufferIndex++] = 0;
         }
-
         AudioFormat format = new AudioFormat(sampleRate, 16, 1, true, false);
         DataLine.Info info = new DataLine.Info(Clip.class, format);
         Clip clip = (Clip) AudioSystem.getLine(info);
@@ -189,23 +160,16 @@ public class Client {
 
     private void playGameplayMusic() {
         if (!musicEnabled || gameplayMusicClip == null || gameplayMusicPlaying) return;
-        
         try {
-            // Set volume for background music (quieter than victory music)
             if (gameplayMusicClip.isControlSupported(FloatControl.Type.MASTER_GAIN)) {
                 FloatControl gainControl = (FloatControl) gameplayMusicClip.getControl(FloatControl.Type.MASTER_GAIN);
-                gainControl.setValue(gainControl.getMaximum() * 0.3f); // 30% of max volume
+                gainControl.setValue(gainControl.getMaximum() * 0.3f);
             }
-            
             gameplayMusicClip.setFramePosition(0);
             gameplayMusicClip.loop(Clip.LOOP_CONTINUOUSLY);
             gameplayMusicPlaying = true;
-            
-            SwingUtilities.invokeLater(() -> {
-                
-            });
-        } catch (Exception e) {
-        }
+            SwingUtilities.invokeLater(() -> {});
+        } catch (Exception e) {}
     }
 
     private void stopGameplayMusic() {
@@ -217,31 +181,19 @@ public class Client {
 
     private void playEndGameMusic() {
         if (!musicEnabled || endGameMusicClip == null) return;
-        
         try {
-            stopGameplayMusic(); // Stop background music first
-            
-            // Make sure the clip is stopped and reset
+            stopGameplayMusic();
             if (endGameMusicClip.isRunning()) {
                 endGameMusicClip.stop();
             }
             endGameMusicClip.setFramePosition(0);
-            
-            // Set volume to maximum for victory music
             if (endGameMusicClip.isControlSupported(FloatControl.Type.MASTER_GAIN)) {
                 FloatControl gainControl = (FloatControl) endGameMusicClip.getControl(FloatControl.Type.MASTER_GAIN);
-                gainControl.setValue(gainControl.getMaximum() * 0.8f); // 80% of max volume
+                gainControl.setValue(gainControl.getMaximum() * 0.8f);
             }
-            
             endGameMusicClip.start();
-            
-            // Also show a visual indicator
-            SwingUtilities.invokeLater(() -> {
-                
-            });
-            
-        } catch (Exception e) {
-        }
+            SwingUtilities.invokeLater(() -> {});
+        } catch (Exception e) {}
     }
 
     private void toggleMusic() {
@@ -254,7 +206,6 @@ public class Client {
             musicToggleButton.setText("Music: OFF");
         } else {
             musicToggleButton.setText("Music: ON");
-            // Restart gameplay music if game is in progress
             if (gameplayMusicPlaying) {
                 playGameplayMusic();
             }
@@ -264,38 +215,29 @@ public class Client {
     private void setupGUI() {
         frame = new JFrame("CrazyEights Game - " + username);
         frame.setLayout(new BorderLayout());
-
-        // Chat area for optional text input
         chatArea = new JTextArea(5, 50);
         chatArea.setEditable(false);
         chatArea.setLineWrap(true);
         chatArea.setWrapStyleWord(true);
-
         inputField = new JTextField(40);
         drawButton = new JButton("Draw Card");
         startGameButton = new JButton("Start Game");
-        musicToggleButton = new JButton("Music: ON"); // Initialize music toggle button
-
-        // Card panel for graphical card display
+        musicToggleButton = new JButton("Music: ON");
         cardPanel = new JPanel() {
             @Override
             protected void paintComponent(Graphics g) {
                 super.paintComponent(g);
-                // Draw green felt background
                 Graphics2D g2 = (Graphics2D) g;
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setColor(new Color(0, 100, 0)); // Casino green
+                g2.setColor(new Color(0, 100, 0));
                 g2.fillRoundRect(0, 0, getWidth(), getHeight(), 40, 40);
-                // Optional: Draw a gold border
-                g2.setColor(new Color(218, 165, 32)); // Gold
+                g2.setColor(new Color(218, 165, 32));
                 g2.setStroke(new BasicStroke(6f));
                 g2.drawRoundRect(3, 3, getWidth()-6, getHeight()-6, 40, 40);
             }
         };
         cardPanel.setOpaque(false);
         cardPanel.setLayout(new FlowLayout());
-
-        // Deck panel to display the current card on the discard pile
         deckPanel = new JPanel() {
             @Override
             protected void paintComponent(Graphics g) {
@@ -305,7 +247,6 @@ public class Client {
                     g.fillRoundRect(10, 10, 80, 120, 15, 15);
                     g.setColor(Color.BLACK);
                     g.drawRoundRect(10, 10, 80, 120, 15, 15);
-
                     String display = getCardSymbol(currentCardOnDeck);
                     String suit = getCardSuit(currentCardOnDeck);
                     if (suit != null && (suit.equals("Hearts") || suit.equals("Diamonds"))) {
@@ -315,7 +256,6 @@ public class Client {
                     }
                     g.setFont(new Font("SansSerif", Font.BOLD, 32));
                     g.drawString(display, 25, 80);
-
                     if (currentSuit != null && currentCardOnDeck.startsWith("8")) {
                         g.setColor(Color.BLUE);
                         g.setFont(new Font("SansSerif", Font.PLAIN, 24));
@@ -325,24 +265,19 @@ public class Client {
             }
         };
         deckPanel.setPreferredSize(new Dimension(100, 140));
-
-        // Add components to the frame
         JPanel bottomPanel = new JPanel();
         bottomPanel.setLayout(new BorderLayout());
         bottomPanel.add(new JScrollPane(chatArea), BorderLayout.CENTER);
-
         JPanel inputPanel = new JPanel();
         inputPanel.add(inputField);
         inputPanel.add(drawButton);
         inputPanel.add(startGameButton);
-        inputPanel.add(musicToggleButton); // Add music toggle button
+        inputPanel.add(musicToggleButton);
         bottomPanel.add(inputPanel, BorderLayout.SOUTH);
-
         JPanel centerPanel = new JPanel(new BorderLayout()) {
             @Override
             protected void paintComponent(Graphics g) {
                 super.paintComponent(g);
-                // Draw green felt background for the whole center panel
                 Graphics2D g2 = (Graphics2D) g;
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
                 g2.setColor(new Color(0, 100, 0));
@@ -352,16 +287,12 @@ public class Client {
         centerPanel.setOpaque(false);
         centerPanel.add(cardPanel, BorderLayout.CENTER);
         centerPanel.add(deckPanel, BorderLayout.SOUTH);
-
         frame.add(centerPanel, BorderLayout.CENTER);
         frame.add(bottomPanel, BorderLayout.SOUTH);
-
-        // Add action listeners
         inputField.addActionListener(e -> sendMessage());
         drawButton.addActionListener(e -> drawCard());
         startGameButton.addActionListener(e -> showStartMenu());
-        musicToggleButton.addActionListener(e -> toggleMusic()); // Add music toggle listener
-
+        musicToggleButton.addActionListener(e -> toggleMusic());
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setSize(800, 600);
         frame.setVisible(true);
@@ -457,14 +388,13 @@ public class Client {
         String symbol = "";
         if (suit != null) {
             switch (suit) {
-                case "Hearts": symbol = "\u2665"; break; // ♥
-                case "Diamonds": symbol = "\u2666"; break; // ♦
-                case "Clubs": symbol = "\u2663"; break; // ♣
-                case "Spades": symbol = "\u2660"; break; // ♠
+                case "Hearts": symbol = "\u2665"; break;
+                case "Diamonds": symbol = "\u2666"; break;
+                case "Clubs": symbol = "\u2663"; break;
+                case "Spades": symbol = "\u2660"; break;
                 default: symbol = suit;
             }
         }
-        // Use only first letter for face cards (J, Q, K, A), else number
         if (rank.equals("Jack")) rank = "J";
         else if (rank.equals("Queen")) rank = "Q";
         else if (rank.equals("King")) rank = "K";
@@ -475,10 +405,10 @@ public class Client {
     private String getSuitSymbol(String suit) {
         if (suit == null) return "";
         switch (suit) {
-            case "Hearts": return "\u2665"; // ♥
-            case "Diamonds": return "\u2666"; // ♦
-            case "Clubs": return "\u2663"; // ♣
-            case "Spades": return "\u2660"; // ♠
+            case "Hearts": return "\u2665";
+            case "Diamonds": return "\u2666";
+            case "Clubs": return "\u2663";
+            case "Spades": return "\u2660";
             default: return suit;
         }
     }
@@ -491,16 +421,12 @@ public class Client {
             String playRank = getCardRank(card);
             String playSuit = getCardSuit(card);
             String currentRank = getCardRank(currentCardOnDeck);
-            
             String effectiveSuit = currentSuit != null ? currentSuit : getCardSuit(currentCardOnDeck);
-            
             boolean isEight = playRank.equals("8");
             boolean ranksMatch = playRank.equals(currentRank);
             boolean suitsMatch = playSuit.equals(effectiveSuit);
-            
             boolean isValid = isEight || ranksMatch || suitsMatch;
             return isValid;
-            
         } catch (Exception e) {
             return false;
         }
@@ -509,13 +435,10 @@ public class Client {
     private void playCard(String card) {
         hand.remove(card);
         updateCardPanel();
-        
         out.println("PLAY:" + card);
         out.flush();
-        
         if (card.startsWith("8")) {
         }
-        
         updateDeckCard(card);
         myTurn = false;
     }
@@ -525,18 +448,24 @@ public class Client {
             JOptionPane.showMessageDialog(frame, "It's not your turn!", "Wait", JOptionPane.WARNING_MESSAGE);
             return;
         }
-        
         out.println("DRAW");
         out.flush();
+        cardsDrawnCount++;
+        String drawMsg = "Drawn card #" + cardsDrawnCount + " at " + java.time.LocalTime.now();
+        cardsDrawnHistory.add(drawMsg);
+        StringBuilder history = new StringBuilder();
+        for (int i = 0; i < cardsDrawnHistory.size(); i++) {
+            history.append(cardsDrawnHistory.get(i)).append("; ");
+        }
+        chatArea.append("You have drawn " + cardsDrawnCount + " card(s) this game.\n");
+        chatArea.append("Draw history: " + history.toString() + "\n");
     }
 
     private void updateDeckCard(String card) {
         currentCardOnDeck = card;
-        
         if (!card.startsWith("8")) {
             currentSuit = null;
         }
-        
         deckPanel.repaint();
     }
 
@@ -560,7 +489,6 @@ public class Client {
             try {
                 String message;
                 while ((message = in.readLine()) != null) {
-                    
                     if (message.startsWith("HAND:")) {
                         hand.clear();
                         String[] cards = message.substring(5).split(",");
@@ -570,23 +498,19 @@ public class Client {
                             }
                         }
                         SwingUtilities.invokeLater(() -> updateCardPanel());
-                        
                     } else if (message.startsWith("DRAWN_CARD:")) {
                         String card = message.substring(11).trim();
                         hand.add(card);
                         chatArea.append("You drew: " + card + "\n");
                         SwingUtilities.invokeLater(() -> updateCardPanel());
-                        
                     } else if (message.startsWith("CURRENT_CARD:")) {
                         String card = message.substring(13).trim();
                         currentCardOnDeck = card;
                         SwingUtilities.invokeLater(() -> deckPanel.repaint());
                         chatArea.append("Current card: " + card + "\n");
-                        
                     } else if (message.equals("YOUR_TURN")) {
                         chatArea.append("It's your turn! Click a card to play or press 'Draw Card'.\n");
                         myTurn = true;
-                        
                     } else if (message.equals("CHOOSE_SUIT")) {
                         String[] suits = {"Hearts", "Diamonds", "Clubs", "Spades"};
                         String suit = (String) JOptionPane.showInputDialog(
@@ -597,7 +521,6 @@ public class Client {
                             null, 
                             suits, 
                             suits[0]);
-                        
                         if (suit != null) {
                             currentSuit = suit;
                             out.println("SUIT:" + suit);
@@ -610,38 +533,29 @@ public class Client {
                             chatArea.append("You chose suit: " + getSuitSymbol("Hearts") + "\n");
                         }
                         deckPanel.repaint();
-                        
                     } else if (message.startsWith("CHOSEN_SUIT:")) {
                         String suit = message.substring(12).trim();
                         currentSuit = suit;
                         chatArea.append("Current suit changed to: " + getSuitSymbol(currentSuit) + "\n");
                         deckPanel.repaint();
-                        
                     } else if (message.startsWith("GAME_OVER:Server")) {
                         SwingUtilities.invokeLater(() -> {
                             stopGameplayMusic();
                             JOptionPane.showMessageDialog(frame, "Game ended by server.\nType 'restart' to play again.", "Game Over", JOptionPane.INFORMATION_MESSAGE);
                         });
                         myTurn = false;
-                        
                     } else if (message.equals("Game is starting...")) {
-                        // Start gameplay music when game begins
                         SwingUtilities.invokeLater(() -> playGameplayMusic());
                         chatArea.append(message + "\n");
-                        
                     } else {
                         chatArea.append(message + "\n");
-                        
-                        // End game screen if someone wins
                         if (message.contains("wins the game!")) {
                             String winner = message.split(" ")[0];
                             SwingUtilities.invokeLater(() -> {
-                                playEndGameMusic(); // Play victory music
+                                playEndGameMusic();
                                 JOptionPane.showMessageDialog(frame, winner + " wins the game!\nType 'restart' to play again.", "Game Over", JOptionPane.INFORMATION_MESSAGE);
                             });
                         }
-                        
-                        // Check if a message contains suit selection from another player
                         if (message.contains(" chose suit: ")) {
                             String suit = message.substring(message.indexOf("suit: ") + 6).trim();
                             currentSuit = suit;
