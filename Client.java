@@ -5,8 +5,6 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.awt.*;
-import java.util.ArrayList;
-import java.util.List;
 import javax.sound.sampled.*;
 import java.io.File;
 import java.io.InputStream;
@@ -23,7 +21,7 @@ public class Client {
     private JButton startGameButton;
     private JButton musicToggleButton; // New button to toggle music
     private JPanel cardPanel;
-    private List<String> hand = new ArrayList<>();
+    private DLList<String> hand = new DLList<>();
     private JPanel deckPanel;
     private String currentCardOnDeck;
     private String currentSuit;
@@ -68,9 +66,7 @@ public class Client {
             // Initialize end game music with a different tone
             endGameMusicClip = generateEndGameMusic();
             
-            System.out.println("Music initialized successfully");
         } catch (Exception e) {
-            System.out.println("Could not initialize music: " + e.getMessage());
             musicEnabled = false;
         }
     }
@@ -100,7 +96,7 @@ public class Client {
 
                 // ADSR envelope (attack, decay, sustain, release)
                 double env;
-                double attack = 0.08, decay = 0.12, sustain = 0.6, release = 0.18;
+                double attack = 0.08, decay = 0.12, release = 0.18;
                 double pos = (double) i / samplesPerNote;
                 if (pos < attack) env = pos / attack;
                 else if (pos < attack + decay) env = 1.0 - (pos - attack) / decay * 0.3;
@@ -204,14 +200,11 @@ public class Client {
             gameplayMusicClip.setFramePosition(0);
             gameplayMusicClip.loop(Clip.LOOP_CONTINUOUSLY);
             gameplayMusicPlaying = true;
-            System.out.println("Started gameplay music - Twinkle Twinkle Little Star variation");
             
             SwingUtilities.invokeLater(() -> {
                 
             });
         } catch (Exception e) {
-            System.out.println("Error playing gameplay music: " + e.getMessage());
-            e.printStackTrace();
         }
     }
 
@@ -219,7 +212,6 @@ public class Client {
         if (gameplayMusicClip != null && gameplayMusicPlaying) {
             gameplayMusicClip.stop();
             gameplayMusicPlaying = false;
-            System.out.println("Stopped gameplay music");
         }
     }
 
@@ -242,7 +234,6 @@ public class Client {
             }
             
             endGameMusicClip.start();
-            System.out.println("Playing victory music - Ode to Joy!");
             
             // Also show a visual indicator
             SwingUtilities.invokeLater(() -> {
@@ -250,8 +241,6 @@ public class Client {
             });
             
         } catch (Exception e) {
-            System.out.println("Error playing end game music: " + e.getMessage());
-            e.printStackTrace();
         }
     }
 
@@ -398,7 +387,6 @@ public class Client {
 
     private void updateCardPanel() {
         cardPanel.removeAll();
-        System.out.println("Updating card panel with " + hand.size() + " cards");
         for (String card : hand) {
             JPanel cardGraphic = new JPanel() {
                 @Override
@@ -428,12 +416,10 @@ public class Client {
                         JOptionPane.showMessageDialog(frame, "It's not your turn!", "Wait", JOptionPane.WARNING_MESSAGE);
                         return;
                     }
-                    System.out.println("Card clicked: " + card);
                     if (isValidPlay(card)) {
                         playCard(card);
                         myTurn = false;
                     } else {
-                        System.out.println("Invalid play detected for card: " + card);
                         JOptionPane.showMessageDialog(frame, 
                             "Invalid move! Card does not match the current suit or rank.\n" +
                             "Current card: " + currentCardOnDeck + "\n" +
@@ -498,16 +484,9 @@ public class Client {
     }
 
     private boolean isValidPlay(String card) {
-        System.out.println("\n--- VALIDATING PLAY ---");
-        System.out.println("Card to play: " + card);
-        System.out.println("Current card on deck: " + currentCardOnDeck);
-        System.out.println("Current suit: " + currentSuit);
-        
         if (currentCardOnDeck == null || currentCardOnDeck.isEmpty()) {
-            System.out.println("ERROR: No current card on deck!");
             return false;
         }
-        
         try {
             String playRank = getCardRank(card);
             String playSuit = getCardSuit(card);
@@ -515,40 +494,26 @@ public class Client {
             
             String effectiveSuit = currentSuit != null ? currentSuit : getCardSuit(currentCardOnDeck);
             
-            System.out.println("Current card: " + currentRank + " of " + effectiveSuit);
-            System.out.println("Playing card: " + playRank + " of " + playSuit);
-            
             boolean isEight = playRank.equals("8");
             boolean ranksMatch = playRank.equals(currentRank);
             boolean suitsMatch = playSuit.equals(effectiveSuit);
             
-            System.out.println("Is eight? " + isEight);
-            System.out.println("Ranks match? " + ranksMatch);
-            System.out.println("Suits match? " + suitsMatch);
-            
             boolean isValid = isEight || ranksMatch || suitsMatch;
-            System.out.println("VALIDATION RESULT: " + (isValid ? "VALID PLAY" : "INVALID PLAY"));
             return isValid;
             
         } catch (Exception e) {
-            System.out.println("ERROR in validation: " + e.getMessage());
-            e.printStackTrace();
             return false;
         }
     }
 
     private void playCard(String card) {
-        System.out.println("Playing card: " + card);
-        
         hand.remove(card);
         updateCardPanel();
         
-        System.out.println("Sending PLAY command to server: " + card);
         out.println("PLAY:" + card);
         out.flush();
         
         if (card.startsWith("8")) {
-            System.out.println("Playing an 8 - will be prompted for suit selection");
         }
         
         updateDeckCard(card);
@@ -561,13 +526,11 @@ public class Client {
             return;
         }
         
-        System.out.println("Drawing card from server");
         out.println("DRAW");
         out.flush();
     }
 
     private void updateDeckCard(String card) {
-        System.out.println("Updating current deck card to: " + card);
         currentCardOnDeck = card;
         
         if (!card.startsWith("8")) {
@@ -597,7 +560,6 @@ public class Client {
             try {
                 String message;
                 while ((message = in.readLine()) != null) {
-                    System.out.println("SERVER → CLIENT: " + message);
                     
                     if (message.startsWith("HAND:")) {
                         hand.clear();
@@ -607,25 +569,21 @@ public class Client {
                                 hand.add(card.trim());
                             }
                         }
-                        System.out.println("Hand updated: " + hand);
                         SwingUtilities.invokeLater(() -> updateCardPanel());
                         
                     } else if (message.startsWith("DRAWN_CARD:")) {
                         String card = message.substring(11).trim();
                         hand.add(card);
-                        System.out.println("Card drawn: " + card);
                         chatArea.append("You drew: " + card + "\n");
                         SwingUtilities.invokeLater(() -> updateCardPanel());
                         
                     } else if (message.startsWith("CURRENT_CARD:")) {
                         String card = message.substring(13).trim();
-                        System.out.println("Current card updated to: " + card);
                         currentCardOnDeck = card;
                         SwingUtilities.invokeLater(() -> deckPanel.repaint());
                         chatArea.append("Current card: " + card + "\n");
                         
                     } else if (message.equals("YOUR_TURN")) {
-                        System.out.println("It's now this player's turn");
                         chatArea.append("It's your turn! Click a card to play or press 'Draw Card'.\n");
                         myTurn = true;
                         
@@ -641,13 +599,11 @@ public class Client {
                             suits[0]);
                         
                         if (suit != null) {
-                            System.out.println("Chosen suit: " + suit);
                             currentSuit = suit;
                             out.println("SUIT:" + suit);
                             out.flush();
                             chatArea.append("You chose suit: " + getSuitSymbol(suit) + "\n");
                         } else {
-                            System.out.println("Dialog canceled, defaulting to Hearts");
                             currentSuit = "Hearts";
                             out.println("SUIT:Hearts");
                             out.flush();
@@ -657,7 +613,6 @@ public class Client {
                         
                     } else if (message.startsWith("CHOSEN_SUIT:")) {
                         String suit = message.substring(12).trim();
-                        System.out.println("Server notified of chosen suit: " + suit);
                         currentSuit = suit;
                         chatArea.append("Current suit changed to: " + getSuitSymbol(currentSuit) + "\n");
                         deckPanel.repaint();
@@ -689,7 +644,6 @@ public class Client {
                         // Check if a message contains suit selection from another player
                         if (message.contains(" chose suit: ")) {
                             String suit = message.substring(message.indexOf("suit: ") + 6).trim();
-                            System.out.println("Detected suit change in chat: " + suit);
                             currentSuit = suit;
                             deckPanel.repaint();
                         }
@@ -697,9 +651,7 @@ public class Client {
                     chatArea.setCaretPosition(chatArea.getDocument().getLength());
                 }
             } catch (IOException e) {
-                System.out.println("Connection error: " + e.getMessage());
                 chatArea.append("Connection to server lost: " + e.getMessage() + "\n");
-                e.printStackTrace();
             }
         }
     }

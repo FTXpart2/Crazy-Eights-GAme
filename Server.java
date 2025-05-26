@@ -6,59 +6,94 @@ import java.io.*;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.HashSet;
-import java.util.List; 
-import java.util.Arrays;
-import java.util.Random;
-import java.util.Set;
-import java.util.Map;
-import java.util.HashMap;
-import java.util.Collections;
-import java.util.Stack;
-import javax.swing.DefaultListModel; // For managing the client list
-import java.util.ArrayList;
+import javax.swing.DefaultListModel;
 
 public class Server {
-    private static CopyOnWriteArrayList<ClientHandler> clients = new CopyOnWriteArrayList<>();
-    private static volatile boolean isRunning = true; // Flag to control the server loop
+    static class UserScore {
+        String username;
+        int score;
+        UserScore(String username, int score) {
+            this.username = username;
+            this.score = score;
+        }
+    }
+
+    private static DLList<ClientHandler> clients = new DLList<>();
+    private static volatile boolean isRunning = true;
     private static int currentPlayerIndex = -1;
-    private static String currentAnimal = null; // Track the current animal being described
-    private static final Map<String, Integer> userScores = new HashMap<>(); // Track user scores
-    private static final Set<String> readyPlayers = new HashSet<>(); // Track players who pressed "Start"
-    private static Stack<String> deck = new Stack<>();
-    private static Stack<String> discardPile = new Stack<>();
-    private static String currentSuit = null; // Track the current suit in play
+    private static final DLList<UserScore> userScores = new DLList<>();
+    private static final DLList<String> readyPlayers = new DLList<>();
+    private static DLList<String> deck = new DLList<>();
+    private static DLList<String> discardPile = new DLList<>();
+    private static String currentSuit = null;
     private static boolean gameStarted = false;
     private static ClientHandler waitingForSuitPlayer = null;
     private static String waitingForSuitCard = null;
 
+    private static void push(DLList<String> stack, String value) { stack.add(value); }
+    private static String pop(DLList<String> stack) { String v = stack.get(stack.size()-1); stack.remove(v); return v; }
+    private static String peek(DLList<String> stack) { return stack.get(stack.size()-1); }
+    private static void clear(DLList<?> list) { while (!list.isEmpty()) list.remove(0); }
+
+    private static boolean readyPlayersContains(String name) { return readyPlayers.contains(name); }
+    private static void readyPlayersAdd(String name) { if (!readyPlayers.contains(name)) readyPlayers.add(name); }
+    private static void readyPlayersClear() { clear(readyPlayers); }
+
+    private static void userScoresPutIfAbsent(String username, int score) {
+        for (UserScore us : userScores) {
+            if (us.username.equals(username)) return;
+        }
+        userScores.add(new UserScore(username, score));
+    }
+    private static int userScoresGet(String username) {
+        for (UserScore us : userScores) {
+            if (us.username.equals(username)) return us.score;
+        }
+        return 0;
+    }
+    private static void userScoresSet(String username, int score) {
+        for (UserScore us : userScores) {
+            if (us.username.equals(username)) { us.score = score; return; }
+        }
+        userScores.add(new UserScore(username, score));
+    }
+    private static Iterable<UserScore> userScoresEntrySet() { return userScores; }
+
+    private static void shuffle(DLList<String> list) {
+        java.util.Random rand = new java.util.Random();
+        for (int i = list.size() - 1; i > 0; i--) {
+            int j = rand.nextInt(i + 1);
+            String temp = list.get(i);
+            list.remove(temp);
+            list.add(j, temp);
+        }
+    }
+
     public static void main(String[] args) {
         int portNumber = 4414;
-
-        // Server UI components
         JFrame frame = new JFrame("Server Chat");
         JTextArea chatArea = new JTextArea(20, 50);
         JTextField inputField = new JTextField(40);
         JButton sendButton = new JButton("Send");
-        JButton startGameButton = new JButton("Start Game"); // Add "Start Game" button
-        JList<String> clientList = new JList<>(new DefaultListModel<>()); // List of connected clients
+        JButton startGameButton = new JButton("Start Game");
+        JList<String> clientList = new JList<>(new DefaultListModel<>());
         JPanel panel = new JPanel();
 
         chatArea.setEditable(false);
         panel.add(inputField);
         panel.add(sendButton);
-        panel.add(startGameButton); // Add "Start Game" button to panel
+        panel.add(startGameButton);
+        JLabel infoLabel = new JLabel("Type 'y' in the chat to end the game.");
+        panel.add(infoLabel);
 
         frame.setLayout(new BorderLayout());
         frame.add(new JScrollPane(chatArea), BorderLayout.CENTER);
         frame.add(panel, BorderLayout.SOUTH);
-        frame.add(new JScrollPane(clientList), BorderLayout.EAST); // Add client list to the right
+        frame.add(new JScrollPane(clientList), BorderLayout.EAST);
         frame.pack();
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setVisible(true);
 
-        // ActionListener for the "Send" button
         sendButton.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
@@ -79,7 +114,6 @@ public class Server {
             }
         });
 
-        // ActionListener for the "Start Game" button
         startGameButton.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
@@ -90,7 +124,6 @@ public class Server {
         try (ServerSocket serverSocket = new ServerSocket(portNumber)) {
             chatArea.append("Server started. Waiting for clients on port " + portNumber + "...\n");
             chatArea.append("Server is now listening for connections on IP: " + InetAddress.getLocalHost().getHostAddress() + "\n");
-
             while (isRunning) {
                 try {
                     Socket clientSocket = serverSocket.accept();
@@ -117,38 +150,32 @@ public class Server {
             broadcastToAllClients("Waiting for all players to press 'Start'...");
             return;
         }
-
-        // Clear the chat area for all clients
         broadcastToAllClients("CLEAR_CHAT");
         broadcastToAllClients("Game is starting...");
-
         initializeDeck();
         dealCards();
-        discardPile.push(deck.pop());
-        currentSuit = getCardSuit(discardPile.peek());
-        broadcastToAllClients("First card: " + discardPile.peek());
-        broadcastToAllClients("CURRENT_CARD:" + discardPile.peek()); // Ensure all clients know the current card at game start
+        push(discardPile, pop(deck));
+        currentSuit = getCardSuit(peek(discardPile));
+        broadcastToAllClients("First card: " + peek(discardPile));
+        broadcastToAllClients("CURRENT_CARD:" + peek(discardPile));
         gameStarted = true;
         nextTurn();
     }
 
     private static synchronized void restartGame() {
-        // Reset game state
-        deck.clear();
-        discardPile.clear();
+        clear(deck);
+        clear(discardPile);
         currentSuit = null;
         gameStarted = false;
         waitingForSuitPlayer = null;
         waitingForSuitCard = null;
-        readyPlayers.clear();
-        // Clear all player hands
+        readyPlayersClear();
         for (ClientHandler client : clients) {
             client.hand.clear();
         }
         broadcastToAllClients("Game is restarting...");
-        // Mark all players as ready for auto-restart
         for (ClientHandler client : clients) {
-            readyPlayers.add(client.getUsername());
+            readyPlayersAdd(client.getUsername());
         }
         startGame();
     }
@@ -158,16 +185,16 @@ public class Server {
         String[] ranks = {"2", "3", "4", "5", "6", "7", "8", "9", "10", "Jack", "Queen", "King", "Ace"};
         for (String suit : suits) {
             for (String rank : ranks) {
-                deck.push(rank + " of " + suit);
+                deck.add(rank + " of " + suit);
             }
         }
-        Collections.shuffle(deck);
+        shuffle(deck);
     }
 
     private static void dealCards() {
         for (ClientHandler client : clients) {
             for (int i = 0; i < 5; i++) {
-                client.addCardToHand(deck.pop());
+                client.addCardToHand(pop(deck));
             }
             client.sendHand();
         }
@@ -176,11 +203,10 @@ public class Server {
     private static void nextTurn() {
         currentPlayerIndex = (currentPlayerIndex + 1) % clients.size();
         ClientHandler currentPlayer = clients.get(currentPlayerIndex);
-        // Always send the current card to the current player before their turn
-        currentPlayer.sendMessage("CURRENT_CARD:" + discardPile.peek());
+        currentPlayer.sendMessage("CURRENT_CARD:" + peek(discardPile));
         broadcastToAllClients("It's " + currentPlayer.getUsername() + "'s turn.");
         currentPlayer.sendMessage("YOUR_TURN");
-        currentPlayer.sendHand(); // Send the player's hand when it's their turn
+        currentPlayer.sendHand();
     }
 
     private static String getCardSuit(String card) {
@@ -194,7 +220,7 @@ public class Server {
         }
         if (card.equals("DRAW")) {
             if (!deck.isEmpty()) {
-                String drawnCard = deck.pop();
+                String drawnCard = pop(deck);
                 player.addCardToHand(drawnCard);
                 player.sendMessage("DRAWN_CARD:" + drawnCard);
             } else {
@@ -202,17 +228,15 @@ public class Server {
             }
             return;
         }
-
         if (!player.getHand().contains(card)) {
             player.sendMessage("Invalid move: You don't have that card.");
             return;
         }
-
         String cardSuit = getCardSuit(card);
-        String currentCardRank = discardPile.peek().split(" of ")[0];
+        String currentCardRank = peek(discardPile).split(" of ")[0];
         if (cardSuit.equals(currentSuit) || card.startsWith("8") || card.startsWith(currentCardRank)) {
             player.removeCardFromHand(card);
-            discardPile.push(card);
+            push(discardPile, card);
             if (card.startsWith("8")) {
                 waitingForSuitPlayer = player;
                 waitingForSuitCard = card;
@@ -222,8 +246,7 @@ public class Server {
                 currentSuit = cardSuit;
             }
             broadcastToAllClients(player.getUsername() + " played: " + card);
-            broadcastToAllClients("CURRENT_CARD:" + card); // Notify all clients of the new card in play
-
+            broadcastToAllClients("CURRENT_CARD:" + card);
             if (player.getHand().isEmpty()) {
                 broadcastToAllClients(player.getUsername() + " wins the game!");
                 gameStarted = false;
@@ -239,14 +262,14 @@ public class Server {
 
     private static void displayFinalScores() {
         broadcastToAllClients("Final Scores:");
-        for (Map.Entry<String, Integer> entry : userScores.entrySet()) {
-            broadcastToAllClients(entry.getKey() + ": " + entry.getValue() + " points");
+        for (UserScore entry : userScoresEntrySet()) {
+            broadcastToAllClients(entry.username + ": " + entry.score + " points");
         }
     }
 
     private static void broadcastToAllClients(String message) {
         for (ClientHandler client : clients) {
-            client.sendMessage(message); 
+            client.sendMessage(message);
         }
     }
 
@@ -257,7 +280,7 @@ public class Server {
         private PrintWriter out;
         private BufferedReader in;
         private String username;
-        private List<String> hand = new ArrayList<>();
+        private DLList<String> hand = new DLList<>();
 
         public ClientHandler(Socket socket, JTextArea chatArea, JList<String> clientList) {
             this.socket = socket;
@@ -275,14 +298,14 @@ public class Server {
         public void run() {
             try {
                 username = in.readLine();
-                userScores.putIfAbsent(username, 0);
+                userScoresPutIfAbsent(username, 0);
                 broadcastToAllClients(username + " has joined the game!");
                 updateClientList();
                 String message;
                 while ((message = in.readLine()) != null) {
                     if (message.equals("START_GAME")) {
                         synchronized (readyPlayers) {
-                            readyPlayers.add(username);
+                            readyPlayersAdd(username);
                         }
                         broadcastToAllClients(username + " is ready to start!");
                         if (!gameStarted) startGame();
@@ -331,7 +354,7 @@ public class Server {
 
         public void sendMessage(String message) {
             try {
-                out.println(message); 
+                out.println(message);
             } catch (Exception e) {
                 chatArea.append("Error sending message to client: " + e.getMessage() + "\n");
             }
@@ -345,12 +368,17 @@ public class Server {
             hand.remove(card);
         }
 
-        public List<String> getHand() {
+        public DLList<String> getHand() {
             return hand;
         }
 
         public void sendHand() {
-            sendMessage("HAND:" + String.join(",", hand));
+            StringBuilder sb = new StringBuilder();
+            for (String c : hand) {
+                if (sb.length() > 0) sb.append(",");
+                sb.append(c);
+            }
+            sendMessage("HAND:" + sb.toString());
         }
 
         private void updateClientList() {
