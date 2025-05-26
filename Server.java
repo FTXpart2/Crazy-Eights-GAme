@@ -19,7 +19,7 @@ import java.util.Stack;
 import javax.swing.DefaultListModel; // For managing the client list
 import java.util.ArrayList;
 
-public class Server3 {
+public class Server {
     private static CopyOnWriteArrayList<ClientHandler> clients = new CopyOnWriteArrayList<>();
     private static volatile boolean isRunning = true; // Flag to control the server loop
     private static int currentPlayerIndex = -1;

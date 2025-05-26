@@ -11,7 +11,7 @@ import javax.sound.sampled.*;
 import java.io.File;
 import java.io.InputStream;
 
-public class Client2 {
+public class Client {
     private String username;
     private Socket socket;
     private BufferedReader in;
@@ -35,9 +35,9 @@ public class Client2 {
     private boolean musicEnabled = true;
     private boolean gameplayMusicPlaying = false;
 
-    public Client2() {
+    public Client() {
         try {
-            socket = new Socket("10.210.124.160", 4414);
+            socket = new Socket("192.168.0.239", 4414);
             in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
             out = new PrintWriter(socket.getOutputStream(), true);
 
@@ -80,12 +80,12 @@ public class Client2 {
         int duration = 16; // seconds
         byte[] buffer = new byte[sampleRate * duration * 2];
 
-        // "Twinkle Twinkle Little Star" melody (C major scale)
+        // Gentle, slow, original melody inspired by 'Unchained Melody' style (C major)
         double[] melody = {
-            261.63, 261.63, 392.00, 392.00, 440.00, 440.00, 392.00, 0,
-            349.23, 349.23, 329.63, 329.63, 293.66, 293.66, 261.63, 0,
-            392.00, 392.00, 349.23, 349.23, 329.63, 329.63, 293.66, 0,
-            392.00, 392.00, 349.23, 349.23, 329.63, 329.63, 293.66, 0
+            261.63, 293.66, 329.63, 349.23, 392.00, 349.23, 329.63, 293.66, // C D E F G F E D
+            261.63, 329.63, 392.00, 440.00, 392.00, 349.23, 329.63, 293.66, // C E G A G F E D
+            261.63, 293.66, 329.63, 349.23, 392.00, 349.23, 329.63, 293.66, // repeat
+            261.63, 0, 261.63, 0, 261.63, 0, 261.63, 0 // C (rests for gentle effect)
         };
 
         double noteDuration = (double) duration / melody.length;
@@ -96,11 +96,11 @@ public class Client2 {
             double frequency = melody[noteIndex];
             for (int i = 0; i < samplesPerNote && bufferIndex < buffer.length - 1; i++) {
                 double t = (double) i / sampleRate;
-                double amplitude = 0.25;
+                double amplitude = 0.18;
 
                 // ADSR envelope (attack, decay, sustain, release)
                 double env;
-                double attack = 0.05, decay = 0.1, sustain = 0.7, release = 0.15;
+                double attack = 0.08, decay = 0.12, sustain = 0.6, release = 0.18;
                 double pos = (double) i / samplesPerNote;
                 if (pos < attack) env = pos / attack;
                 else if (pos < attack + decay) env = 1.0 - (pos - attack) / decay * 0.3;
@@ -109,10 +109,9 @@ public class Client2 {
 
                 double wave = 0;
                 if (frequency > 0) {
-                    // Smoother sine wave with gentle harmonics
+                    // Sine wave with gentle harmonics
                     wave += amplitude * env * Math.sin(2 * Math.PI * frequency * t);
-                    wave += 0.15 * amplitude * env * Math.sin(2 * Math.PI * frequency * 2 * t);
-                    wave += 0.08 * amplitude * env * Math.sin(2 * Math.PI * frequency * 3 * t);
+                    wave += 0.10 * amplitude * env * Math.sin(2 * Math.PI * frequency * 2 * t);
                 }
                 short sample = (short) (wave * 32767);
                 buffer[bufferIndex++] = (byte) (sample & 0xFF);
@@ -289,7 +288,22 @@ public class Client2 {
         musicToggleButton = new JButton("Music: ON"); // Initialize music toggle button
 
         // Card panel for graphical card display
-        cardPanel = new JPanel();
+        cardPanel = new JPanel() {
+            @Override
+            protected void paintComponent(Graphics g) {
+                super.paintComponent(g);
+                // Draw green felt background
+                Graphics2D g2 = (Graphics2D) g;
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(new Color(0, 100, 0)); // Casino green
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 40, 40);
+                // Optional: Draw a gold border
+                g2.setColor(new Color(218, 165, 32)); // Gold
+                g2.setStroke(new BasicStroke(6f));
+                g2.drawRoundRect(3, 3, getWidth()-6, getHeight()-6, 40, 40);
+            }
+        };
+        cardPanel.setOpaque(false);
         cardPanel.setLayout(new FlowLayout());
 
         // Deck panel to display the current card on the discard pile
@@ -302,23 +316,21 @@ public class Client2 {
                     g.fillRoundRect(10, 10, 80, 120, 15, 15);
                     g.setColor(Color.BLACK);
                     g.drawRoundRect(10, 10, 80, 120, 15, 15);
-                    
-                    if (currentCardOnDeck.contains(" of ")) {
-                        String suit = currentCardOnDeck.split(" of ")[1].trim();
-                        if (suit.equals("Hearts") || suit.equals("Diamonds")) {
-                            g.setColor(Color.RED);
-                        } else {
-                            g.setColor(Color.BLACK);
-                        }
+
+                    String display = getCardSymbol(currentCardOnDeck);
+                    String suit = getCardSuit(currentCardOnDeck);
+                    if (suit != null && (suit.equals("Hearts") || suit.equals("Diamonds"))) {
+                        g.setColor(Color.RED);
                     } else {
                         g.setColor(Color.BLACK);
                     }
-                    
-                    g.drawString(currentCardOnDeck, 20, 70);
-                    
+                    g.setFont(new Font("SansSerif", Font.BOLD, 32));
+                    g.drawString(display, 25, 80);
+
                     if (currentSuit != null && currentCardOnDeck.startsWith("8")) {
                         g.setColor(Color.BLUE);
-                        g.drawString("Current Suit: " + currentSuit, 20, 100);
+                        g.setFont(new Font("SansSerif", Font.PLAIN, 24));
+                        g.drawString(getSuitSymbol(currentSuit), 55, 110);
                     }
                 }
             }
@@ -337,7 +349,18 @@ public class Client2 {
         inputPanel.add(musicToggleButton); // Add music toggle button
         bottomPanel.add(inputPanel, BorderLayout.SOUTH);
 
-        JPanel centerPanel = new JPanel(new BorderLayout());
+        JPanel centerPanel = new JPanel(new BorderLayout()) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                super.paintComponent(g);
+                // Draw green felt background for the whole center panel
+                Graphics2D g2 = (Graphics2D) g;
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(new Color(0, 100, 0));
+                g2.fillRect(0, 0, getWidth(), getHeight());
+            }
+        };
+        centerPanel.setOpaque(false);
         centerPanel.add(cardPanel, BorderLayout.CENTER);
         centerPanel.add(deckPanel, BorderLayout.SOUTH);
 
@@ -376,7 +399,6 @@ public class Client2 {
     private void updateCardPanel() {
         cardPanel.removeAll();
         System.out.println("Updating card panel with " + hand.size() + " cards");
-        
         for (String card : hand) {
             JPanel cardGraphic = new JPanel() {
                 @Override
@@ -386,23 +408,19 @@ public class Client2 {
                     g.fillRoundRect(10, 10, 80, 120, 15, 15);
                     g.setColor(Color.BLACK);
                     g.drawRoundRect(10, 10, 80, 120, 15, 15);
-                    
-                    if (card.contains(" of ")) {
-                        String suit = card.split(" of ")[1].trim();
-                        if (suit.equals("Hearts") || suit.equals("Diamonds")) {
-                            g.setColor(Color.RED);
-                        } else {
-                            g.setColor(Color.BLACK);
-                        }
+                    String display = getCardSymbol(card);
+                    String suit = getCardSuit(card);
+                    if (suit != null && (suit.equals("Hearts") || suit.equals("Diamonds"))) {
+                        g.setColor(Color.RED);
                     } else {
                         g.setColor(Color.BLACK);
                     }
-                    
-                    g.drawString(card, 20, 70);
+                    g.setFont(new Font("SansSerif", Font.BOLD, 32));
+                    g.drawString(display, 25, 80);
                 }
             };
             cardGraphic.setPreferredSize(new Dimension(100, 140));
-            cardGraphic.setToolTipText("Click to play this card: " + card);
+            cardGraphic.setToolTipText("Click to play this card: " + getCardSymbol(card));
             cardGraphic.addMouseListener(new java.awt.event.MouseAdapter() {
                 @Override
                 public void mouseClicked(java.awt.event.MouseEvent e) {
@@ -410,9 +428,7 @@ public class Client2 {
                         JOptionPane.showMessageDialog(frame, "It's not your turn!", "Wait", JOptionPane.WARNING_MESSAGE);
                         return;
                     }
-                    
                     System.out.println("Card clicked: " + card);
-                    
                     if (isValidPlay(card)) {
                         playCard(card);
                         myTurn = false;
@@ -446,6 +462,39 @@ public class Client2 {
             return card.split(" of ")[0].trim();
         }
         return null;
+    }
+
+    private String getCardSymbol(String card) {
+        if (card == null || !card.contains(" of ")) return card;
+        String rank = getCardRank(card);
+        String suit = getCardSuit(card);
+        String symbol = "";
+        if (suit != null) {
+            switch (suit) {
+                case "Hearts": symbol = "\u2665"; break; // ♥
+                case "Diamonds": symbol = "\u2666"; break; // ♦
+                case "Clubs": symbol = "\u2663"; break; // ♣
+                case "Spades": symbol = "\u2660"; break; // ♠
+                default: symbol = suit;
+            }
+        }
+        // Use only first letter for face cards (J, Q, K, A), else number
+        if (rank.equals("Jack")) rank = "J";
+        else if (rank.equals("Queen")) rank = "Q";
+        else if (rank.equals("King")) rank = "K";
+        else if (rank.equals("Ace")) rank = "A";
+        return rank + symbol;
+    }
+
+    private String getSuitSymbol(String suit) {
+        if (suit == null) return "";
+        switch (suit) {
+            case "Hearts": return "\u2665"; // ♥
+            case "Diamonds": return "\u2666"; // ♦
+            case "Clubs": return "\u2663"; // ♣
+            case "Spades": return "\u2660"; // ♠
+            default: return suit;
+        }
     }
 
     private boolean isValidPlay(String card) {
@@ -596,13 +645,13 @@ public class Client2 {
                             currentSuit = suit;
                             out.println("SUIT:" + suit);
                             out.flush();
-                            chatArea.append("You chose suit: " + suit + "\n");
+                            chatArea.append("You chose suit: " + getSuitSymbol(suit) + "\n");
                         } else {
                             System.out.println("Dialog canceled, defaulting to Hearts");
                             currentSuit = "Hearts";
                             out.println("SUIT:Hearts");
                             out.flush();
-                            chatArea.append("You chose suit: Hearts\n");
+                            chatArea.append("You chose suit: " + getSuitSymbol("Hearts") + "\n");
                         }
                         deckPanel.repaint();
                         
@@ -610,7 +659,7 @@ public class Client2 {
                         String suit = message.substring(12).trim();
                         System.out.println("Server notified of chosen suit: " + suit);
                         currentSuit = suit;
-                        chatArea.append("Current suit changed to: " + currentSuit + "\n");
+                        chatArea.append("Current suit changed to: " + getSuitSymbol(currentSuit) + "\n");
                         deckPanel.repaint();
                         
                     } else if (message.startsWith("GAME_OVER:Server")) {
@@ -656,6 +705,6 @@ public class Client2 {
     }
 
     public static void main(String[] args) {
-        SwingUtilities.invokeLater(() -> new Client2());
+        SwingUtilities.invokeLater(() -> new Client());
     }
 }
