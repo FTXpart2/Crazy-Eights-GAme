@@ -1,4 +1,6 @@
 import java.net.Socket;
+import java.util.ArrayList;
+
 import javax.swing.*;
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -35,7 +37,7 @@ public class Client {
 
     public Client() {
         try {
-            socket = new Socket("192.168.0.239", 4414);
+            socket = new Socket("10.210.15.144", 4414);
             in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
             out = new PrintWriter(socket.getOutputStream(), true);
             username = JOptionPane.showInputDialog("Enter your username:");
